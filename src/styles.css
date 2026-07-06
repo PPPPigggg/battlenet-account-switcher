@@ -1,0 +1,151 @@
+:root {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  color: #1b1b1b;
+  background: #f3f3f3;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-width: 860px;
+  min-height: 620px;
+  margin: 0;
+}
+
+body {
+  background: #f3f3f3;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f3f3f3;
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-right: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 16px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 220px;
+}
+
+.tab-label > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-footer {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.content-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 24px !important;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.subtle-text {
+  color: #616161;
+}
+
+.group-command-row,
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account-section {
+  display: grid;
+  gap: 12px;
+}
+
+.loading-row {
+  min-height: 28px;
+}
+
+.empty-card {
+  display: flex;
+  align-items: flex-start;
+  padding: 24px !important;
+}
+
+.empty-card button {
+  align-self: flex-start;
+}
+
+.empty-icon {
+  color: #005a9e;
+  font-size: 32px;
+}
+
+.cell-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dialog-form {
+  display: grid;
+  gap: 16px;
+  min-width: 360px;
+}
+
+@media (max-width: 920px) {
+  html,
+  body,
+  #app {
+    min-width: 0;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .content-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
