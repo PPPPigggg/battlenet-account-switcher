@@ -13,6 +13,8 @@
 html,
 body,
 #app {
+  width: 100%;
+  height: 100%;
   min-width: 860px;
   min-height: 620px;
   margin: 0;
@@ -20,12 +22,79 @@ body,
 
 body {
   background: #f3f3f3;
+  overflow: hidden;
+}
+
+.app-frame {
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+.window-titlebar {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr) auto;
+  height: 32px;
+  border-bottom: 1px solid #e8e8e8;
+  user-select: none;
+}
+
+.window-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border-right: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 0 14px;
+  color: #242424;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.window-titlebar-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: #0078d4;
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 18%);
+}
+
+.window-titlebar-drag,
+.window-controls {
+  background: #ffffff;
+}
+
+.window-controls {
+  display: flex;
+  align-items: stretch;
+}
+
+.window-control-button {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #424242;
+  padding: 0;
+}
+
+.window-control-button:hover {
+  background: #f3f3f3;
+}
+
+.window-control-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
 }
 
 .app-shell {
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr);
-  min-height: 100vh;
+  min-height: calc(100vh - 32px);
   background: #f3f3f3;
 }
 
@@ -33,6 +102,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
+  overflow: auto;
   border-right: 1px solid #e0e0e0;
   background: #fafafa;
   padding: 16px;
@@ -71,6 +142,9 @@ body {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #ffffff;
   padding: 24px !important;
 }
 
@@ -133,6 +207,18 @@ body {
   body,
   #app {
     min-width: 0;
+  }
+
+  .window-titlebar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .window-titlebar-brand {
+    border-right: 0;
+  }
+
+  .window-titlebar-drag {
+    display: none;
   }
 
   .app-shell {

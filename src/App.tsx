@@ -48,11 +48,23 @@ import {
   Play20Regular,
   Save20Regular,
   Settings20Regular,
+  Square20Regular,
+  Subtract20Regular,
 } from "@fluentui/react-icons"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import { api } from "./api"
 import type { AccountInfo, GroupInfo } from "./types"
 
 const DEFAULT_GROUP_ID = "default"
+const isTauriWindow = () =>
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+
+const withCurrentWindow = (
+  action: (currentWindow: ReturnType<typeof getCurrentWindow>) => Promise<void>,
+) => {
+  if (!isTauriWindow()) return
+  void action(getCurrentWindow()).catch(() => undefined)
+}
 
 export default function App() {
   const [accounts, setAccounts] = useState<AccountInfo[]>([])
@@ -365,6 +377,18 @@ export default function App() {
     }
   }
 
+  const minimizeWindow = () => {
+    withCurrentWindow((currentWindow) => currentWindow.minimize())
+  }
+
+  const toggleMaximizeWindow = () => {
+    withCurrentWindow((currentWindow) => currentWindow.toggleMaximize())
+  }
+
+  const closeWindow = () => {
+    withCurrentWindow((currentWindow) => currentWindow.close())
+  }
+
   const formatDate = (value: string) => {
     if (!value) return "未使用"
     return new Intl.DateTimeFormat("zh-CN", {
@@ -376,14 +400,49 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="app-sidebar">
-        <Card appearance="subtle">
-          <CardHeader
-            header={<Title2>战网账号切换</Title2>}
-            description={<Text size={200}>账号配置切换与分组管理</Text>}
-          />
-        </Card>
+    <div className="app-frame">
+      <header className="window-titlebar" data-tauri-drag-region>
+        <div className="window-titlebar-brand" data-tauri-drag-region>
+          <span className="window-titlebar-mark" aria-hidden="true" />
+          <span data-tauri-drag-region>StormSwitch</span>
+        </div>
+        <div className="window-titlebar-drag" data-tauri-drag-region />
+        <div className="window-controls">
+          <button
+            className="window-control-button"
+            type="button"
+            aria-label="最小化"
+            onClick={minimizeWindow}
+          >
+            <Subtract20Regular />
+          </button>
+          <button
+            className="window-control-button"
+            type="button"
+            aria-label="最大化"
+            onClick={toggleMaximizeWindow}
+          >
+            <Square20Regular />
+          </button>
+          <button
+            className="window-control-button window-control-close"
+            type="button"
+            aria-label="关闭"
+            onClick={closeWindow}
+          >
+            <Dismiss20Regular />
+          </button>
+        </div>
+      </header>
+
+      <main className="app-shell">
+        <aside className="app-sidebar">
+          <Card appearance="subtle">
+            <CardHeader
+              header={<Title2>战网账号切换</Title2>}
+              description={<Text size={200}>账号配置切换与分组管理</Text>}
+            />
+          </Card>
 
         <div>
           <Divider />
@@ -575,6 +634,7 @@ export default function App() {
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </main>
+      </main>
+    </div>
   )
 }
