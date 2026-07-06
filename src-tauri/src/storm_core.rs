@@ -214,8 +214,10 @@ impl BattleNetCore {
             return false;
         }
 
-        kill_battle_net_processes();
-        thread::sleep(Duration::from_millis(1500));
+        if !self.is_multiple_instances_enabled() {
+            kill_battle_net_processes();
+            thread::sleep(Duration::from_millis(1500));
+        }
 
         if self.config_file_path.exists() && fs::remove_file(&self.config_file_path).is_err() {
             return false;
@@ -259,8 +261,10 @@ impl BattleNetCore {
     }
 
     pub fn add_new_account(&mut self) -> bool {
-        kill_battle_net_processes();
-        thread::sleep(Duration::from_millis(1500));
+        if !self.is_multiple_instances_enabled() {
+            kill_battle_net_processes();
+            thread::sleep(Duration::from_millis(1500));
+        }
 
         if self.config_file_path.exists() {
             let _ = fs::remove_file(&self.config_file_path);
@@ -353,6 +357,14 @@ impl BattleNetCore {
     fn account_dir(&self, id: &str) -> PathBuf {
         self.data_dir.join(id)
     }
+
+    fn is_multiple_instances_enabled(&self) -> bool {
+        fs::read_to_string(&self.config_file_path)
+            .ok()
+            .and_then(|content| battle_net_single_instance_value(&content))
+            .map(|single_instance| !single_instance)
+            .unwrap_or(false)
+    }
 }
 
 fn read_store_value<T>(app: &tauri::AppHandle, key: &str) -> Option<T>
@@ -405,6 +417,37 @@ fn is_safe_id(value: &str) -> bool {
         && value
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+}
+
+fn battle_net_single_instance_value(content: &str) -> Option<bool> {
+    let value: serde_json::Value = serde_json::from_str(content).ok()?;
+    find_single_instance_value(&value)
+}
+
+fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(value) = map.get("SingleInstance") {
+                return parse_boolish_value(value);
+            }
+
+            map.values().find_map(find_single_instance_value)
+        }
+        serde_json::Value::Array(values) => values.iter().find_map(find_single_instance_value),
+        _ => None,
+    }
+}
+
+fn parse_boolish_value(value: &serde_json::Value) -> Option<bool> {
+    match value {
+        serde_json::Value::Bool(value) => Some(*value),
+        serde_json::Value::String(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn battle_net_app_data_path() -> PathBuf {
@@ -525,5 +568,31 @@ impl CommandExtHidden for Command {
     fn creation_flags(&mut self, flags: u32) -> &mut Self {
         use std::os::windows::process::CommandExt;
         CommandExt::creation_flags(self, flags)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::battle_net_single_instance_value;
+
+    #[test]
+    fn reads_string_single_instance_value() {
+        let content = r#"{"Client":{"SingleInstance":"false"}}"#;
+
+        assert_eq!(battle_net_single_instance_value(content), Some(false));
+    }
+
+    #[test]
+    fn reads_boolean_single_instance_value() {
+        let content = r#"{"Client":{"SingleInstance":true}}"#;
+
+        assert_eq!(battle_net_single_instance_value(content), Some(true));
+    }
+
+    #[test]
+    fn returns_none_when_single_instance_is_missing() {
+        let content = r#"{"Client":{"Locale":"zhCN"}}"#;
+
+        assert_eq!(battle_net_single_instance_value(content), None);
     }
 }
