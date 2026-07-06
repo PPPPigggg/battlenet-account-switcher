@@ -41,7 +41,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Windows installer
-        run: pnpm tauri build -- --bundles nsis
+        run: pnpm tauri build --bundles nsis
 
       - name: Upload installer to release
         uses: softprops/action-gh-release@v2
