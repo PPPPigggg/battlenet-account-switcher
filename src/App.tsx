@@ -134,6 +134,9 @@ export default function App() {
           >
             <span className="cell-title">
               <span>{account.Remark}</span>
+              {account.LoggedIn && (
+                <Badge color="success">已登录</Badge>
+              )}
               {activeAccount?.Id === account.Id && (
                 <Badge color="brand">最近</Badge>
               )}

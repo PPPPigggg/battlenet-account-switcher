@@ -33,6 +33,7 @@ const normalizeState = (state: Partial<DevState>): DevState => {
     Username: account.Username ?? '',
     LastUsed: account.LastUsed || now(),
     GroupId: groupIds.has(account.GroupId) ? account.GroupId : DEFAULT_GROUP_ID,
+    LoggedIn: Boolean(account.LoggedIn),
   }));
 
   return {
@@ -144,6 +145,7 @@ class DevApi {
       Username: '',
       LastUsed: now(),
       GroupId: targetGroupId,
+      LoggedIn: true,
     });
     this.write(state);
     return true;

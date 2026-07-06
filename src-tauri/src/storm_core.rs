@@ -1,13 +1,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{
-    collections::HashSet,
-    env, fs,
-    path::PathBuf,
-    thread,
-    time::Duration,
-};
+use std::{collections::HashSet, env, fs, path::PathBuf, thread, time::Duration};
 #[cfg(windows)]
 use std::{io, process::Command};
 use tauri_plugin_store::StoreExt;
@@ -26,9 +20,12 @@ const BATTLE_NET_CONFIG_FILE: &str = "Battle.net.config";
 pub struct AccountInfo {
     pub id: String,
     pub remark: String,
+    #[serde(default)]
     pub username: String,
     pub last_used: String,
     pub group_id: String,
+    #[serde(default)]
+    pub logged_in: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -66,6 +63,7 @@ impl BattleNetCore {
         if self.normalize_accounts(app, &mut accounts) {
             let _ = self.save_accounts(app, &accounts);
         }
+        self.mark_logged_in_accounts(&mut accounts);
         accounts
     }
 
@@ -83,7 +81,10 @@ impl BattleNetCore {
         }
 
         let mut groups = self.read_groups(app);
-        if let Some(existing) = groups.iter().find(|group| group.name.eq_ignore_ascii_case(&name)) {
+        if let Some(existing) = groups
+            .iter()
+            .find(|group| group.name.eq_ignore_ascii_case(&name))
+        {
             return Some(existing.clone());
         }
 
@@ -146,7 +147,12 @@ impl BattleNetCore {
         !changed || self.save_accounts(app, &accounts)
     }
 
-    pub fn move_account_to_group(&mut self, app: &tauri::AppHandle, account_id: &str, group_id: &str) -> bool {
+    pub fn move_account_to_group(
+        &mut self,
+        app: &tauri::AppHandle,
+        account_id: &str,
+        group_id: &str,
+    ) -> bool {
         let target_group_id = self.ensure_valid_group_id(app, group_id);
         let mut accounts = self.get_accounts(app);
         let Some(account) = accounts.iter_mut().find(|account| account.id == account_id) else {
@@ -188,7 +194,12 @@ impl BattleNetCore {
             return false;
         }
 
-        if fs::copy(&self.config_file_path, account_dir.join(BATTLE_NET_CONFIG_FILE)).is_err() {
+        if fs::copy(
+            &self.config_file_path,
+            account_dir.join(BATTLE_NET_CONFIG_FILE),
+        )
+        .is_err()
+        {
             return false;
         }
 
@@ -196,9 +207,10 @@ impl BattleNetCore {
         accounts.push(AccountInfo {
             id: account_id,
             remark: fallback_account_name(remark),
-            username: String::new(),
+            username: self.current_account_name().unwrap_or_default(),
             last_used: now_string(),
             group_id: self.ensure_valid_group_id(app, group_id),
+            logged_in: false,
         });
 
         self.save_accounts(app, &accounts)
@@ -336,6 +348,12 @@ impl BattleNetCore {
                 account.remark = "未命名账号".to_string();
                 changed = true;
             }
+            if account.username.trim().is_empty() {
+                if let Some(username) = self.saved_account_name(&account.id) {
+                    account.username = username;
+                    changed = true;
+                }
+            }
         }
 
         changed
@@ -364,6 +382,36 @@ impl BattleNetCore {
             .and_then(|content| battle_net_single_instance_value(&content))
             .map(|single_instance| !single_instance)
             .unwrap_or(false)
+    }
+
+    fn current_account_name(&self) -> Option<String> {
+        fs::read_to_string(&self.config_file_path)
+            .ok()
+            .and_then(|content| battle_net_saved_account_names(&content).into_iter().next())
+    }
+
+    fn saved_account_name(&self, id: &str) -> Option<String> {
+        let saved_config = self.account_dir(id).join(BATTLE_NET_CONFIG_FILE);
+        fs::read_to_string(saved_config)
+            .ok()
+            .and_then(|content| battle_net_saved_account_names(&content).into_iter().next())
+    }
+
+    fn mark_logged_in_accounts(&self, accounts: &mut [AccountInfo]) {
+        let logged_in_names = fs::read_to_string(&self.config_file_path)
+            .ok()
+            .map(|content| {
+                battle_net_saved_account_names(&content)
+                    .into_iter()
+                    .map(|name| normalize_account_name(&name))
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+
+        for account in accounts {
+            account.logged_in = !account.username.is_empty()
+                && logged_in_names.contains(&normalize_account_name(&account.username));
+        }
     }
 }
 
@@ -424,6 +472,18 @@ fn battle_net_single_instance_value(content: &str) -> Option<bool> {
     find_single_instance_value(&value)
 }
 
+fn battle_net_saved_account_names(content: &str) -> Vec<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
+        return Vec::new();
+    };
+
+    let Some(value) = find_saved_account_names_value(&value) else {
+        return Vec::new();
+    };
+
+    parse_account_names(value)
+}
+
 fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
     match value {
         serde_json::Value::Object(map) => {
@@ -436,6 +496,45 @@ fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
         serde_json::Value::Array(values) => values.iter().find_map(find_single_instance_value),
         _ => None,
     }
+}
+
+fn find_saved_account_names_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(value) = map.get("SavedAccountNames") {
+                return Some(value);
+            }
+
+            map.values().find_map(find_saved_account_names_value)
+        }
+        serde_json::Value::Array(values) => values.iter().find_map(find_saved_account_names_value),
+        _ => None,
+    }
+}
+
+fn parse_account_names(value: &serde_json::Value) -> Vec<String> {
+    match value {
+        serde_json::Value::String(value) => split_account_names(value),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .filter_map(|value| value.as_str())
+            .flat_map(split_account_names)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn split_account_names(value: &str) -> Vec<String> {
+    value
+        .split([',', ';', '\n', '\r', '\t'])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn normalize_account_name(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
 }
 
 fn parse_boolish_value(value: &serde_json::Value) -> Option<bool> {
@@ -539,7 +638,8 @@ fn platform_set_auto_start(enabled: bool) -> bool {
         let Ok(exe_path) = env::current_exe() else {
             return false;
         };
-        key.set_value(APP_NAME, &exe_path.to_string_lossy().to_string()).is_ok()
+        key.set_value(APP_NAME, &exe_path.to_string_lossy().to_string())
+            .is_ok()
     } else {
         key.delete_value(APP_NAME)
             .or_else(|error| {
@@ -573,7 +673,7 @@ impl CommandExtHidden for Command {
 
 #[cfg(test)]
 mod tests {
-    use super::battle_net_single_instance_value;
+    use super::{battle_net_saved_account_names, battle_net_single_instance_value};
 
     #[test]
     fn reads_string_single_instance_value() {
@@ -594,5 +694,25 @@ mod tests {
         let content = r#"{"Client":{"Locale":"zhCN"}}"#;
 
         assert_eq!(battle_net_single_instance_value(content), None);
+    }
+
+    #[test]
+    fn reads_saved_account_names() {
+        let content = r#"{"Client":{"SavedAccountNames":"one@example.com,two@example.com"}}"#;
+
+        assert_eq!(
+            battle_net_saved_account_names(content),
+            vec!["one@example.com", "two@example.com"]
+        );
+    }
+
+    #[test]
+    fn reads_saved_account_names_from_arrays() {
+        let content = r#"{"Client":{"SavedAccountNames":["one@example.com", "two@example.com"]}}"#;
+
+        assert_eq!(
+            battle_net_saved_account_names(content),
+            vec!["one@example.com", "two@example.com"]
+        );
     }
 }
