@@ -402,10 +402,7 @@ export default function App() {
   return (
     <div className="app-frame">
       <header className="window-titlebar" data-tauri-drag-region>
-        <div className="window-titlebar-brand" data-tauri-drag-region>
-          <span className="window-titlebar-mark" aria-hidden="true" />
-          <span data-tauri-drag-region>StormSwitch</span>
-        </div>
+        <div className="window-titlebar-brand" data-tauri-drag-region></div>
         <div className="window-titlebar-drag" data-tauri-drag-region />
         <div className="window-controls">
           <button
@@ -444,196 +441,196 @@ export default function App() {
             />
           </Card>
 
-        <div>
-          <Divider />
-        </div>
-
-        <TabList
-          vertical
-          selectedValue={selectedGroupId}
-          onTabSelect={(_, data) => setSelectedGroupId(String(data.value))}
-        >
-          {orderedGroups.map((group) => (
-            <Tab key={group.Id} value={group.Id}>
-              <span className="tab-label">
-                <span>{group.Name}</span>
-                <Badge appearance="tint">{groupCounts[group.Id] ?? 0}</Badge>
-              </span>
-            </Tab>
-          ))}
-        </TabList>
-
-        <div className="sidebar-footer">
-          <Button icon={<FolderAdd20Regular />} onClick={createGroup}>
-            新建分组
-          </Button>
-          <Switch
-            checked={autoStart}
-            onChange={toggleAutoStart}
-            label="开机启动"
-          />
-        </div>
-      </aside>
-
-      <section className="content-pane">
-        <header className="content-header">
           <div>
-            <Title3>{selectedGroup?.Name || "默认分组"}</Title3>
+            <Divider />
           </div>
 
-          <Toolbar aria-label="账号操作">
-            <ToolbarButton
-              icon={<ArrowClockwise20Regular />}
-              onClick={loadData}
-              disabled={busy}
-            >
-              刷新
-            </ToolbarButton>
-            <ToolbarButton
-              icon={<PersonAdd20Regular />}
-              onClick={loginNewAccount}
-            >
-              登录新号
-            </ToolbarButton>
-            <ToolbarButton
-              icon={<Add20Regular />}
-              appearance="primary"
-              onClick={openSaveDialog}
-            >
-              保存当前
-            </ToolbarButton>
-          </Toolbar>
-        </header>
+          <TabList
+            vertical
+            selectedValue={selectedGroupId}
+            onTabSelect={(_, data) => setSelectedGroupId(String(data.value))}
+          >
+            {orderedGroups.map((group) => (
+              <Tab key={group.Id} value={group.Id}>
+                <span className="tab-label">
+                  <span>{group.Name}</span>
+                  <Badge appearance="tint">{groupCounts[group.Id] ?? 0}</Badge>
+                </span>
+              </Tab>
+            ))}
+          </TabList>
 
-        {(notice || error) && (
-          <MessageBar intent={error ? "error" : "success"}>
-            <MessageBarBody>{notice || error}</MessageBarBody>
-          </MessageBar>
-        )}
-
-        {selectedGroup?.Id !== DEFAULT_GROUP_ID && (
-          <div className="group-command-row">
-            <Button icon={<Edit20Regular />} onClick={renameGroup}>
-              重命名分组
+          <div className="sidebar-footer">
+            <Button icon={<FolderAdd20Regular />} onClick={createGroup}>
+              新建分组
             </Button>
-            <Button icon={<Delete20Regular />} onClick={deleteGroup}>
-              删除分组
-            </Button>
+            <Switch
+              checked={autoStart}
+              onChange={toggleAutoStart}
+              label="开机启动"
+            />
           </div>
-        )}
+        </aside>
 
-        <section className="account-section" aria-busy={busy}>
-          {busy && (
-            <div className="loading-row">
-              <Spinner size="tiny" label="正在处理" />
+        <section className="content-pane">
+          <header className="content-header">
+            <div>
+              <Title3>{selectedGroup?.Name || "默认分组"}</Title3>
+            </div>
+
+            <Toolbar aria-label="账号操作">
+              <ToolbarButton
+                icon={<ArrowClockwise20Regular />}
+                onClick={loadData}
+                disabled={busy}
+              >
+                刷新
+              </ToolbarButton>
+              <ToolbarButton
+                icon={<PersonAdd20Regular />}
+                onClick={loginNewAccount}
+              >
+                登录新号
+              </ToolbarButton>
+              <ToolbarButton
+                icon={<Add20Regular />}
+                appearance="primary"
+                onClick={openSaveDialog}
+              >
+                保存当前
+              </ToolbarButton>
+            </Toolbar>
+          </header>
+
+          {(notice || error) && (
+            <MessageBar intent={error ? "error" : "success"}>
+              <MessageBarBody>{notice || error}</MessageBarBody>
+            </MessageBar>
+          )}
+
+          {selectedGroup?.Id !== DEFAULT_GROUP_ID && (
+            <div className="group-command-row">
+              <Button icon={<Edit20Regular />} onClick={renameGroup}>
+                重命名分组
+              </Button>
+              <Button icon={<Delete20Regular />} onClick={deleteGroup}>
+                删除分组
+              </Button>
             </div>
           )}
 
-          {visibleAccounts.length === 0 ? (
-            <Card className="empty-card">
-              <Settings20Regular className="empty-icon" />
-              <Text size={500}>此分组没有账号</Text>
-              <Text>
-                在浏览器开发模式下可以直接保存模拟账号；在 Windows Tauri
-                应用中会保存真实 Battle.net 登录配置。
-              </Text>
-              <Button
-                appearance="primary"
-                icon={<Add20Regular />}
-                onClick={openSaveDialog}
+          <section className="account-section" aria-busy={busy}>
+            {busy && (
+              <div className="loading-row">
+                <Spinner size="tiny" label="正在处理" />
+              </div>
+            )}
+
+            {visibleAccounts.length === 0 ? (
+              <Card className="empty-card">
+                <Settings20Regular className="empty-icon" />
+                <Text size={500}>此分组没有账号</Text>
+                <Text>
+                  在浏览器开发模式下可以直接保存模拟账号；在 Windows Tauri
+                  应用中会保存真实 Battle.net 登录配置。
+                </Text>
+                <Button
+                  appearance="primary"
+                  icon={<Add20Regular />}
+                  onClick={openSaveDialog}
+                >
+                  保存当前状态
+                </Button>
+              </Card>
+            ) : (
+              <DataGrid
+                items={visibleAccounts}
+                columns={columns}
+                getRowId={(account) => account.Id}
+                focusMode="composite"
+                sortable
               >
-                保存当前状态
-              </Button>
-            </Card>
-          ) : (
-            <DataGrid
-              items={visibleAccounts}
-              columns={columns}
-              getRowId={(account) => account.Id}
-              focusMode="composite"
-              sortable
-            >
-              <DataGridHeader>
-                <DataGridRow>
-                  {({ renderHeaderCell }) => (
-                    <DataGridHeaderCell>
-                      {renderHeaderCell()}
-                    </DataGridHeaderCell>
-                  )}
-                </DataGridRow>
-              </DataGridHeader>
-              <DataGridBody<AccountInfo>>
-                {({ item, rowId }) => (
-                  <DataGridRow<AccountInfo> key={rowId}>
-                    {({ renderCell }) => (
-                      <DataGridCell>{renderCell(item)}</DataGridCell>
+                <DataGridHeader>
+                  <DataGridRow>
+                    {({ renderHeaderCell }) => (
+                      <DataGridHeaderCell>
+                        {renderHeaderCell()}
+                      </DataGridHeaderCell>
                     )}
                   </DataGridRow>
-                )}
-              </DataGridBody>
-            </DataGrid>
-          )}
+                </DataGridHeader>
+                <DataGridBody<AccountInfo>>
+                  {({ item, rowId }) => (
+                    <DataGridRow<AccountInfo> key={rowId}>
+                      {({ renderCell }) => (
+                        <DataGridCell>{renderCell(item)}</DataGridCell>
+                      )}
+                    </DataGridRow>
+                  )}
+                </DataGridBody>
+              </DataGrid>
+            )}
+          </section>
         </section>
-      </section>
 
-      <Dialog
-        open={panelOpen}
-        onOpenChange={(_, data) => setPanelOpen(data.open)}
-      >
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle
-              action={
-                <Button
-                  appearance="subtle"
-                  aria-label="关闭"
-                  icon={<Dismiss20Regular />}
-                  onClick={closeDialog}
-                />
-              }
-            >
-              {editingAccountId ? "编辑账号" : "保存当前登录状态"}
-            </DialogTitle>
-
-            <DialogContent className="dialog-form">
-              <Field label="账号备注" required>
-                <Input
-                  value={remark}
-                  onChange={(_, data) => setRemark(data.value)}
-                  placeholder="例如：主力账号"
-                  autoFocus
-                />
-              </Field>
-              <Field label="分组">
-                <Select
-                  value={saveGroupId}
-                  onChange={(event) =>
-                    setSaveGroupId(event.currentTarget.value)
-                  }
-                >
-                  {orderedGroups.map((group) => (
-                    <option key={group.Id} value={group.Id}>
-                      {group.Name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </DialogContent>
-
-            <DialogActions>
-              <Button onClick={closeDialog}>取消</Button>
-              <Button
-                appearance="primary"
-                icon={<Save20Regular />}
-                onClick={saveAccount}
-                disabled={busy}
+        <Dialog
+          open={panelOpen}
+          onOpenChange={(_, data) => setPanelOpen(data.open)}
+        >
+          <DialogSurface>
+            <DialogBody>
+              <DialogTitle
+                action={
+                  <Button
+                    appearance="subtle"
+                    aria-label="关闭"
+                    icon={<Dismiss20Regular />}
+                    onClick={closeDialog}
+                  />
+                }
               >
-                {editingAccountId ? "保存修改" : "保存配置"}
-              </Button>
-            </DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+                {editingAccountId ? "编辑账号" : "保存当前登录状态"}
+              </DialogTitle>
+
+              <DialogContent className="dialog-form">
+                <Field label="账号备注" required>
+                  <Input
+                    value={remark}
+                    onChange={(_, data) => setRemark(data.value)}
+                    placeholder="例如：主力账号"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="分组">
+                  <Select
+                    value={saveGroupId}
+                    onChange={(event) =>
+                      setSaveGroupId(event.currentTarget.value)
+                    }
+                  >
+                    {orderedGroups.map((group) => (
+                      <option key={group.Id} value={group.Id}>
+                        {group.Name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </DialogContent>
+
+              <DialogActions>
+                <Button onClick={closeDialog}>取消</Button>
+                <Button
+                  appearance="primary"
+                  icon={<Save20Regular />}
+                  onClick={saveAccount}
+                  disabled={busy}
+                >
+                  {editingAccountId ? "保存修改" : "保存配置"}
+                </Button>
+              </DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
       </main>
     </div>
   )
