@@ -3,6 +3,11 @@ name: Build Windows Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload assets to
+        required: true
 
 permissions:
   contents: write
@@ -15,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -33,10 +40,13 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and upload Windows installer
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Windows installer
+        run: pnpm tauri build -- --bundles nsis
+
+      - name: Upload installer to release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseId: ${{ github.event.release.id }}
-          args: --bundles nsis
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+          files: src-tauri/target/release/bundle/nsis/*.exe
