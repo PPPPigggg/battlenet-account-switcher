@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { type MouseEvent, useEffect, useMemo, useState } from "react"
 import {
   Avatar,
   Badge,
@@ -392,6 +392,18 @@ export default function App() {
     withCurrentWindow((currentWindow) => currentWindow.close())
   }
 
+  const handleTitlebarMouseDown = (event: MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+
+    if (event.detail === 2) {
+      event.preventDefault()
+      toggleMaximizeWindow()
+      return
+    }
+
+    withCurrentWindow((currentWindow) => currentWindow.startDragging())
+  }
+
   const formatDate = (value: string) => {
     if (!value) return "未使用"
     return new Intl.DateTimeFormat("zh-CN", {
@@ -404,10 +416,17 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <header className="window-titlebar" data-tauri-drag-region>
-        <div className="window-titlebar-brand" data-tauri-drag-region></div>
+      <header
+        className="window-titlebar"
+        data-tauri-drag-region
+        onMouseDown={handleTitlebarMouseDown}
+      >
+        <div className="window-titlebar-brand" data-tauri-drag-region />
         <div className="window-titlebar-drag" data-tauri-drag-region />
-        <div className="window-controls">
+        <div
+          className="window-controls"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <button
             className="window-control-button"
             type="button"
