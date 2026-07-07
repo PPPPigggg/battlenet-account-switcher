@@ -15,7 +15,6 @@ const ACCOUNTS_KEY: &str = "accounts";
 const GROUPS_KEY: &str = "groups";
 const CLOSE_TO_TRAY_KEY: &str = "closeToTray";
 const BATTLE_NET_CONFIG_FILE: &str = "Battle.net.config";
-const BATTLE_NET_ACCOUNT_DIR: &str = "Account";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -193,7 +192,7 @@ impl BattleNetCore {
             return false;
         }
 
-        if !self.save_current_snapshot(&account_dir) {
+        if !self.save_current_config(&account_dir) {
             return false;
         }
 
@@ -219,11 +218,17 @@ impl BattleNetCore {
             return false;
         }
 
-        kill_battle_net_processes();
-        thread::sleep(Duration::from_millis(1500));
+        if self.is_single_instance_enabled() {
+            if !self.restore_config(&account_dir) {
+                return false;
+            }
+        } else {
+            kill_battle_net_processes();
+            thread::sleep(Duration::from_millis(1500));
 
-        if !self.restore_snapshot(&account_dir) {
-            return false;
+            if !self.restore_config(&account_dir) {
+                return false;
+            }
         }
 
         let mut accounts = self.get_accounts(app);
@@ -261,7 +266,9 @@ impl BattleNetCore {
             thread::sleep(Duration::from_millis(1500));
         }
 
-        clear_battle_net_snapshot(&self.app_data_path);
+        if self.config_file_path.exists() {
+            let _ = fs::remove_file(&self.config_file_path);
+        }
 
         launch_battle_net();
         true
@@ -367,21 +374,35 @@ impl BattleNetCore {
             .unwrap_or(false)
     }
 
-    fn save_current_snapshot(&self, account_dir: &PathBuf) -> bool {
+    fn is_single_instance_enabled(&self) -> bool {
+        fs::read_to_string(&self.config_file_path)
+            .ok()
+            .and_then(|content| battle_net_single_instance_value(&content))
+            .unwrap_or(false)
+    }
+
+    fn save_current_config(&self, account_dir: &PathBuf) -> bool {
         if !self.config_file_path.exists() || fs::create_dir_all(account_dir).is_err() {
             return false;
         }
 
-        copy_battle_net_snapshot(&self.app_data_path, account_dir)
+        fs::copy(
+            &self.config_file_path,
+            account_dir.join(BATTLE_NET_CONFIG_FILE),
+        )
+        .is_ok()
     }
 
-    fn restore_snapshot(&self, account_dir: &PathBuf) -> bool {
+    fn restore_config(&self, account_dir: &PathBuf) -> bool {
         if fs::create_dir_all(&self.app_data_path).is_err() {
             return false;
         }
 
-        clear_battle_net_snapshot(&self.app_data_path);
-        copy_battle_net_snapshot(account_dir, &self.app_data_path)
+        fs::copy(
+            account_dir.join(BATTLE_NET_CONFIG_FILE),
+            &self.config_file_path,
+        )
+        .is_ok()
     }
 }
 
@@ -466,71 +487,6 @@ fn parse_boolish_value(value: &serde_json::Value) -> Option<bool> {
         },
         _ => None,
     }
-}
-
-fn copy_battle_net_snapshot(from: &PathBuf, to: &PathBuf) -> bool {
-    if fs::create_dir_all(to).is_err() {
-        return false;
-    }
-
-    let Ok(entries) = fs::read_dir(from) else {
-        return false;
-    };
-    let mut copied_required_config = false;
-
-    for entry in entries.flatten() {
-        let source = entry.path();
-        let target = to.join(entry.file_name());
-
-        if source.is_file() && source.extension().is_some_and(|ext| ext == "config") {
-            if fs::copy(&source, &target).is_err() {
-                return false;
-            }
-            if entry.file_name() == BATTLE_NET_CONFIG_FILE {
-                copied_required_config = true;
-            }
-        } else if source.is_dir() && entry.file_name() == BATTLE_NET_ACCOUNT_DIR {
-            let _ = fs::remove_dir_all(&target);
-            if copy_dir_recursive(&source, &target).is_err() {
-                return false;
-            }
-        }
-    }
-
-    copied_required_config
-}
-
-fn clear_battle_net_snapshot(path: &PathBuf) {
-    let Ok(entries) = fs::read_dir(path) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let item = entry.path();
-        if item.is_file() && item.extension().is_some_and(|ext| ext == "config") {
-            let _ = fs::remove_file(item);
-        } else if item.is_dir() && entry.file_name() == BATTLE_NET_ACCOUNT_DIR {
-            let _ = fs::remove_dir_all(item);
-        }
-    }
-}
-
-fn copy_dir_recursive(from: &PathBuf, to: &PathBuf) -> std::io::Result<()> {
-    fs::create_dir_all(to)?;
-
-    for entry in fs::read_dir(from)? {
-        let entry = entry?;
-        let source = entry.path();
-        let target = to.join(entry.file_name());
-
-        if source.is_dir() {
-            copy_dir_recursive(&source, &target)?;
-        } else if source.is_file() {
-            fs::copy(source, target)?;
-        }
-    }
-
-    Ok(())
 }
 
 fn battle_net_app_data_path() -> PathBuf {
