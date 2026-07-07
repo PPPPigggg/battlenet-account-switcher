@@ -218,12 +218,13 @@ impl BattleNetCore {
             return false;
         }
 
-        if self.is_single_instance_enabled() {
+        let single_instance_enabled = self.is_single_instance_enabled();
+        if single_instance_enabled {
             kill_battle_net_processes();
             thread::sleep(Duration::from_millis(1500));
         }
 
-        if !self.restore_config(&account_dir) {
+        if !self.restore_config(&account_dir, single_instance_enabled) {
             return false;
         }
 
@@ -389,16 +390,25 @@ impl BattleNetCore {
         .is_ok()
     }
 
-    fn restore_config(&self, account_dir: &PathBuf) -> bool {
+    fn restore_config(&self, account_dir: &PathBuf, single_instance_enabled: bool) -> bool {
         if fs::create_dir_all(&self.app_data_path).is_err() {
             return false;
         }
 
-        fs::copy(
-            account_dir.join(BATTLE_NET_CONFIG_FILE),
-            &self.config_file_path,
-        )
-        .is_ok()
+        let source_path = account_dir.join(BATTLE_NET_CONFIG_FILE);
+        let Ok(content) = fs::read_to_string(&source_path) else {
+            return fs::copy(source_path, &self.config_file_path).is_ok();
+        };
+
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&content) else {
+            return fs::copy(source_path, &self.config_file_path).is_ok();
+        };
+
+        apply_single_instance_value(&mut value, single_instance_enabled);
+        serde_json::to_string(&value)
+            .ok()
+            .and_then(|content| fs::write(&self.config_file_path, content).ok())
+            .is_some()
     }
 }
 
@@ -470,6 +480,40 @@ fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
         }
         serde_json::Value::Array(values) => values.iter().find_map(find_single_instance_value),
         _ => None,
+    }
+}
+
+fn apply_single_instance_value(value: &mut serde_json::Value, single_instance: bool) {
+    if replace_single_instance_value(value, single_instance) {
+        return;
+    }
+
+    if let serde_json::Value::Object(map) = value {
+        let client = map.entry("Client").or_insert_with(|| json!({}));
+        if let serde_json::Value::Object(client_map) = client {
+            client_map.insert(
+                "SingleInstance".to_string(),
+                serde_json::Value::Bool(single_instance),
+            );
+        }
+    }
+}
+
+fn replace_single_instance_value(value: &mut serde_json::Value, single_instance: bool) -> bool {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(value) = map.get_mut("SingleInstance") {
+                *value = serde_json::Value::Bool(single_instance);
+                return true;
+            }
+
+            map.values_mut()
+                .any(|value| replace_single_instance_value(value, single_instance))
+        }
+        serde_json::Value::Array(values) => values
+            .iter_mut()
+            .any(|value| replace_single_instance_value(value, single_instance)),
+        _ => false,
     }
 }
 
@@ -609,7 +653,7 @@ impl CommandExtHidden for Command {
 
 #[cfg(test)]
 mod tests {
-    use super::battle_net_single_instance_value;
+    use super::{apply_single_instance_value, battle_net_single_instance_value};
     use std::path::PathBuf;
 
     #[test]
@@ -642,5 +686,25 @@ mod tests {
         };
 
         assert!(core.is_single_instance_enabled());
+    }
+
+    #[test]
+    fn applies_single_instance_without_using_saved_value() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(r#"{"Client":{"SingleInstance":false}}"#).unwrap();
+
+        apply_single_instance_value(&mut value, true);
+
+        assert_eq!(battle_net_single_instance_value(&value.to_string()), Some(true));
+    }
+
+    #[test]
+    fn inserts_single_instance_when_saved_value_is_missing() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(r#"{"Client":{"Locale":"zhCN"}}"#).unwrap();
+
+        apply_single_instance_value(&mut value, true);
+
+        assert_eq!(battle_net_single_instance_value(&value.to_string()), Some(true));
     }
 }
