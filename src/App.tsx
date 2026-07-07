@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useState } from "react"
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   Avatar,
   Badge,
@@ -77,7 +77,9 @@ export default function App() {
   const [notice, setNotice] = useState("")
   const [error, setErrorText] = useState("")
   const [autoStart, setAutoStart] = useState(false)
+  const [closeToTray, setCloseToTray] = useState(true)
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
+  const forceCloseRef = useRef(false)
 
   const orderedGroups = useMemo(() => {
     const next = [...groups]
@@ -134,9 +136,6 @@ export default function App() {
           >
             <span className="cell-title">
               <span>{account.Remark}</span>
-              {account.LoggedIn && (
-                <Badge color="success">已登录</Badge>
-              )}
               {activeAccount?.Id === account.Id && (
                 <Badge color="brand">最近</Badge>
               )}
@@ -197,15 +196,18 @@ export default function App() {
   const loadData = async () => {
     setBusy(true)
     try {
-      const [nextGroups, nextAccounts, nextAutoStart] = await Promise.all([
-        api.getGroups(),
-        api.getAccounts(),
-        api.getAutoStart(),
-      ])
+      const [nextGroups, nextAccounts, nextAutoStart, nextCloseToTray] =
+        await Promise.all([
+          api.getGroups(),
+          api.getAccounts(),
+          api.getAutoStart(),
+          api.getCloseToTray(),
+        ])
 
       setGroups(nextGroups)
       setAccounts(nextAccounts)
       setAutoStart(nextAutoStart)
+      setCloseToTray(nextCloseToTray)
 
       const validGroupIds = new Set(nextGroups.map((group) => group.Id))
       validGroupIds.add(DEFAULT_GROUP_ID)
@@ -233,6 +235,26 @@ export default function App() {
 
     return () => window.clearTimeout(timer)
   }, [notice, error])
+
+  useEffect(() => {
+    if (!isTauriWindow()) return
+
+    let unlisten: (() => void) | undefined
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (forceCloseRef.current || !closeToTray) return
+
+        event.preventDefault()
+        withCurrentWindow((currentWindow) => currentWindow.hide())
+      })
+      .then((nextUnlisten) => {
+        unlisten = nextUnlisten
+      })
+
+    return () => {
+      unlisten?.()
+    }
+  }, [closeToTray])
 
   const openSaveDialog = () => {
     setEditingAccountId(null)
@@ -380,6 +402,16 @@ export default function App() {
     }
   }
 
+  const toggleCloseToTray = async (_: unknown, data: { checked: boolean }) => {
+    const previous = closeToTray
+    setCloseToTray(data.checked)
+    const ok = await api.setCloseToTray(data.checked)
+    if (!ok) {
+      setCloseToTray(previous)
+      showError("更新托盘设置失败。")
+    }
+  }
+
   const minimizeWindow = () => {
     withCurrentWindow((currentWindow) => currentWindow.minimize())
   }
@@ -491,6 +523,11 @@ export default function App() {
               onChange={toggleAutoStart}
               label="开机启动"
             />
+            <Switch
+              checked={closeToTray}
+              onChange={toggleCloseToTray}
+              label="关闭时最小化窗口"
+            />
           </div>
         </aside>
 
@@ -552,10 +589,7 @@ export default function App() {
               <Card className="empty-card">
                 <Settings20Regular className="empty-icon" />
                 <Text size={500}>此分组没有账号</Text>
-                <Text>
-                  在浏览器开发模式下可以直接保存模拟账号；在 Windows Tauri
-                  应用中会保存真实 Battle.net 登录配置。
-                </Text>
+                <Text>先登录一个 Battle.net 账号，然后保存当前状态用于后续切换。</Text>
                 <Button
                   appearance="primary"
                   icon={<Add20Regular />}

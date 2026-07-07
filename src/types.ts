@@ -4,7 +4,6 @@ export interface AccountInfo {
   Username: string;
   LastUsed: string;
   GroupId: string;
-  LoggedIn: boolean;
 }
 
 export interface GroupInfo {

@@ -8,6 +8,7 @@ interface DevState {
   accounts: AccountInfo[];
   groups: GroupInfo[];
   autoStart: boolean;
+  closeToTray: boolean;
 }
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -33,13 +34,13 @@ const normalizeState = (state: Partial<DevState>): DevState => {
     Username: account.Username ?? '',
     LastUsed: account.LastUsed || now(),
     GroupId: groupIds.has(account.GroupId) ? account.GroupId : DEFAULT_GROUP_ID,
-    LoggedIn: Boolean(account.LoggedIn),
   }));
 
   return {
     accounts,
     groups,
     autoStart: Boolean(state.autoStart),
+    closeToTray: state.closeToTray ?? true,
   };
 };
 
@@ -145,7 +146,6 @@ class DevApi {
       Username: '',
       LastUsed: now(),
       GroupId: targetGroupId,
-      LoggedIn: true,
     });
     this.write(state);
     return true;
@@ -183,6 +183,17 @@ class DevApi {
     this.write(state);
     return true;
   }
+
+  async getCloseToTray() {
+    return this.read().closeToTray;
+  }
+
+  async setCloseToTray(enabled: boolean) {
+    const state = this.read();
+    state.closeToTray = enabled;
+    this.write(state);
+    return true;
+  }
 }
 
 const devApi = new DevApi();
@@ -204,4 +215,6 @@ export const api = {
   addNewAccount: () => isTauri() ? invoke<boolean>('add_new_account') : devApi.addNewAccount(),
   getAutoStart: () => isTauri() ? invoke<boolean>('get_auto_start') : devApi.getAutoStart(),
   setAutoStart: (enabled: boolean) => isTauri() ? invoke<boolean>('set_auto_start', { enabled }) : devApi.setAutoStart(enabled),
+  getCloseToTray: () => isTauri() ? invoke<boolean>('get_close_to_tray') : devApi.getCloseToTray(),
+  setCloseToTray: (enabled: boolean) => isTauri() ? invoke<boolean>('set_close_to_tray', { enabled }) : devApi.setCloseToTray(enabled),
 };

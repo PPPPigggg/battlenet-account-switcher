@@ -13,7 +13,9 @@ const APP_NAME: &str = "StormSwitch";
 const STORE_FILE: &str = "settings.json";
 const ACCOUNTS_KEY: &str = "accounts";
 const GROUPS_KEY: &str = "groups";
+const CLOSE_TO_TRAY_KEY: &str = "closeToTray";
 const BATTLE_NET_CONFIG_FILE: &str = "Battle.net.config";
+const BATTLE_NET_ACCOUNT_DIR: &str = "Account";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -24,8 +26,6 @@ pub struct AccountInfo {
     pub username: String,
     pub last_used: String,
     pub group_id: String,
-    #[serde(default)]
-    pub logged_in: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -63,7 +63,6 @@ impl BattleNetCore {
         if self.normalize_accounts(app, &mut accounts) {
             let _ = self.save_accounts(app, &accounts);
         }
-        self.mark_logged_in_accounts(&mut accounts);
         accounts
     }
 
@@ -194,12 +193,7 @@ impl BattleNetCore {
             return false;
         }
 
-        if fs::copy(
-            &self.config_file_path,
-            account_dir.join(BATTLE_NET_CONFIG_FILE),
-        )
-        .is_err()
-        {
+        if !self.save_current_snapshot(&account_dir) {
             return false;
         }
 
@@ -207,10 +201,9 @@ impl BattleNetCore {
         accounts.push(AccountInfo {
             id: account_id,
             remark: fallback_account_name(remark),
-            username: self.current_account_name().unwrap_or_default(),
+            username: String::new(),
             last_used: now_string(),
             group_id: self.ensure_valid_group_id(app, group_id),
-            logged_in: false,
         });
 
         self.save_accounts(app, &accounts)
@@ -221,25 +214,15 @@ impl BattleNetCore {
             return false;
         }
 
-        let saved_config = self.account_dir(id).join(BATTLE_NET_CONFIG_FILE);
-        if !saved_config.exists() {
+        let account_dir = self.account_dir(id);
+        if !account_dir.join(BATTLE_NET_CONFIG_FILE).exists() {
             return false;
         }
 
-        if !self.is_multiple_instances_enabled() {
-            kill_battle_net_processes();
-            thread::sleep(Duration::from_millis(1500));
-        }
+        kill_battle_net_processes();
+        thread::sleep(Duration::from_millis(1500));
 
-        if self.config_file_path.exists() && fs::remove_file(&self.config_file_path).is_err() {
-            return false;
-        }
-
-        if fs::create_dir_all(&self.app_data_path).is_err() {
-            return false;
-        }
-
-        if fs::copy(saved_config, &self.config_file_path).is_err() {
+        if !self.restore_snapshot(&account_dir) {
             return false;
         }
 
@@ -278,9 +261,7 @@ impl BattleNetCore {
             thread::sleep(Duration::from_millis(1500));
         }
 
-        if self.config_file_path.exists() {
-            let _ = fs::remove_file(&self.config_file_path);
-        }
+        clear_battle_net_snapshot(&self.app_data_path);
 
         launch_battle_net();
         true
@@ -292,6 +273,14 @@ impl BattleNetCore {
 
     pub fn set_auto_start(&self, enabled: bool) -> bool {
         platform_set_auto_start(enabled)
+    }
+
+    pub fn get_close_to_tray(&self, app: &tauri::AppHandle) -> bool {
+        read_store_value(app, CLOSE_TO_TRAY_KEY).unwrap_or(true)
+    }
+
+    pub fn set_close_to_tray(&self, app: &tauri::AppHandle, enabled: bool) -> bool {
+        write_store_value(app, CLOSE_TO_TRAY_KEY, &enabled)
     }
 
     fn read_accounts(&self, app: &tauri::AppHandle) -> Vec<AccountInfo> {
@@ -348,12 +337,6 @@ impl BattleNetCore {
                 account.remark = "未命名账号".to_string();
                 changed = true;
             }
-            if account.username.trim().is_empty() {
-                if let Some(username) = self.saved_account_name(&account.id) {
-                    account.username = username;
-                    changed = true;
-                }
-            }
         }
 
         changed
@@ -384,34 +367,21 @@ impl BattleNetCore {
             .unwrap_or(false)
     }
 
-    fn current_account_name(&self) -> Option<String> {
-        fs::read_to_string(&self.config_file_path)
-            .ok()
-            .and_then(|content| battle_net_saved_account_names(&content).into_iter().next())
-    }
-
-    fn saved_account_name(&self, id: &str) -> Option<String> {
-        let saved_config = self.account_dir(id).join(BATTLE_NET_CONFIG_FILE);
-        fs::read_to_string(saved_config)
-            .ok()
-            .and_then(|content| battle_net_saved_account_names(&content).into_iter().next())
-    }
-
-    fn mark_logged_in_accounts(&self, accounts: &mut [AccountInfo]) {
-        let logged_in_names = fs::read_to_string(&self.config_file_path)
-            .ok()
-            .map(|content| {
-                battle_net_saved_account_names(&content)
-                    .into_iter()
-                    .map(|name| normalize_account_name(&name))
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
-
-        for account in accounts {
-            account.logged_in = !account.username.is_empty()
-                && logged_in_names.contains(&normalize_account_name(&account.username));
+    fn save_current_snapshot(&self, account_dir: &PathBuf) -> bool {
+        if !self.config_file_path.exists() || fs::create_dir_all(account_dir).is_err() {
+            return false;
         }
+
+        copy_battle_net_snapshot(&self.app_data_path, account_dir)
+    }
+
+    fn restore_snapshot(&self, account_dir: &PathBuf) -> bool {
+        if fs::create_dir_all(&self.app_data_path).is_err() {
+            return false;
+        }
+
+        clear_battle_net_snapshot(&self.app_data_path);
+        copy_battle_net_snapshot(account_dir, &self.app_data_path)
     }
 }
 
@@ -472,18 +442,6 @@ fn battle_net_single_instance_value(content: &str) -> Option<bool> {
     find_single_instance_value(&value)
 }
 
-fn battle_net_saved_account_names(content: &str) -> Vec<String> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
-        return Vec::new();
-    };
-
-    let Some(value) = find_saved_account_names_value(&value) else {
-        return Vec::new();
-    };
-
-    parse_account_names(value)
-}
-
 fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
     match value {
         serde_json::Value::Object(map) => {
@@ -498,45 +456,6 @@ fn find_single_instance_value(value: &serde_json::Value) -> Option<bool> {
     }
 }
 
-fn find_saved_account_names_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
-    match value {
-        serde_json::Value::Object(map) => {
-            if let Some(value) = map.get("SavedAccountNames") {
-                return Some(value);
-            }
-
-            map.values().find_map(find_saved_account_names_value)
-        }
-        serde_json::Value::Array(values) => values.iter().find_map(find_saved_account_names_value),
-        _ => None,
-    }
-}
-
-fn parse_account_names(value: &serde_json::Value) -> Vec<String> {
-    match value {
-        serde_json::Value::String(value) => split_account_names(value),
-        serde_json::Value::Array(values) => values
-            .iter()
-            .filter_map(|value| value.as_str())
-            .flat_map(split_account_names)
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn split_account_names(value: &str) -> Vec<String> {
-    value
-        .split([',', ';', '\n', '\r', '\t'])
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .collect()
-}
-
-fn normalize_account_name(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
-}
-
 fn parse_boolish_value(value: &serde_json::Value) -> Option<bool> {
     match value {
         serde_json::Value::Bool(value) => Some(*value),
@@ -547,6 +466,71 @@ fn parse_boolish_value(value: &serde_json::Value) -> Option<bool> {
         },
         _ => None,
     }
+}
+
+fn copy_battle_net_snapshot(from: &PathBuf, to: &PathBuf) -> bool {
+    if fs::create_dir_all(to).is_err() {
+        return false;
+    }
+
+    let Ok(entries) = fs::read_dir(from) else {
+        return false;
+    };
+    let mut copied_required_config = false;
+
+    for entry in entries.flatten() {
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+
+        if source.is_file() && source.extension().is_some_and(|ext| ext == "config") {
+            if fs::copy(&source, &target).is_err() {
+                return false;
+            }
+            if entry.file_name() == BATTLE_NET_CONFIG_FILE {
+                copied_required_config = true;
+            }
+        } else if source.is_dir() && entry.file_name() == BATTLE_NET_ACCOUNT_DIR {
+            let _ = fs::remove_dir_all(&target);
+            if copy_dir_recursive(&source, &target).is_err() {
+                return false;
+            }
+        }
+    }
+
+    copied_required_config
+}
+
+fn clear_battle_net_snapshot(path: &PathBuf) {
+    let Ok(entries) = fs::read_dir(path) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let item = entry.path();
+        if item.is_file() && item.extension().is_some_and(|ext| ext == "config") {
+            let _ = fs::remove_file(item);
+        } else if item.is_dir() && entry.file_name() == BATTLE_NET_ACCOUNT_DIR {
+            let _ = fs::remove_dir_all(item);
+        }
+    }
+}
+
+fn copy_dir_recursive(from: &PathBuf, to: &PathBuf) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+
+        if source.is_dir() {
+            copy_dir_recursive(&source, &target)?;
+        } else if source.is_file() {
+            fs::copy(source, target)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn battle_net_app_data_path() -> PathBuf {
@@ -673,7 +657,7 @@ impl CommandExtHidden for Command {
 
 #[cfg(test)]
 mod tests {
-    use super::{battle_net_saved_account_names, battle_net_single_instance_value};
+    use super::battle_net_single_instance_value;
 
     #[test]
     fn reads_string_single_instance_value() {
@@ -694,25 +678,5 @@ mod tests {
         let content = r#"{"Client":{"Locale":"zhCN"}}"#;
 
         assert_eq!(battle_net_single_instance_value(content), None);
-    }
-
-    #[test]
-    fn reads_saved_account_names() {
-        let content = r#"{"Client":{"SavedAccountNames":"one@example.com,two@example.com"}}"#;
-
-        assert_eq!(
-            battle_net_saved_account_names(content),
-            vec!["one@example.com", "two@example.com"]
-        );
-    }
-
-    #[test]
-    fn reads_saved_account_names_from_arrays() {
-        let content = r#"{"Client":{"SavedAccountNames":["one@example.com", "two@example.com"]}}"#;
-
-        assert_eq!(
-            battle_net_saved_account_names(content),
-            vec!["one@example.com", "two@example.com"]
-        );
     }
 }
