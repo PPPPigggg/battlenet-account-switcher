@@ -219,16 +219,12 @@ impl BattleNetCore {
         }
 
         if self.is_single_instance_enabled() {
-            if !self.restore_config(&account_dir) {
-                return false;
-            }
-        } else {
             kill_battle_net_processes();
             thread::sleep(Duration::from_millis(1500));
+        }
 
-            if !self.restore_config(&account_dir) {
-                return false;
-            }
+        if !self.restore_config(&account_dir) {
+            return false;
         }
 
         let mut accounts = self.get_accounts(app);
@@ -378,7 +374,7 @@ impl BattleNetCore {
         fs::read_to_string(&self.config_file_path)
             .ok()
             .and_then(|content| battle_net_single_instance_value(&content))
-            .unwrap_or(false)
+            .unwrap_or(true)
     }
 
     fn save_current_config(&self, account_dir: &PathBuf) -> bool {
@@ -614,6 +610,7 @@ impl CommandExtHidden for Command {
 #[cfg(test)]
 mod tests {
     use super::battle_net_single_instance_value;
+    use std::path::PathBuf;
 
     #[test]
     fn reads_string_single_instance_value() {
@@ -634,5 +631,16 @@ mod tests {
         let content = r#"{"Client":{"Locale":"zhCN"}}"#;
 
         assert_eq!(battle_net_single_instance_value(content), None);
+    }
+
+    #[test]
+    fn defaults_to_single_instance_when_value_is_missing() {
+        let core = super::BattleNetCore {
+            app_data_path: PathBuf::new(),
+            data_dir: PathBuf::new(),
+            config_file_path: PathBuf::from("missing-config-file"),
+        };
+
+        assert!(core.is_single_instance_enabled());
     }
 }
